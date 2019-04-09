@@ -34,7 +34,7 @@ public class GUI extends JFrame{
         this.model = model;
 
         setTitle("Filter");
-        setSize(1200, 800);
+        setSize(1200, 700);
         setMinimumSize(new Dimension(600, 400));
         setLocationByPlatform(true);
 
@@ -286,6 +286,63 @@ public class GUI extends JFrame{
 
         toolBar.addSeparator();
 
+        addButton("Load config", "File", "Load config file for volume rendering", true, "/resources/config.png", () -> {
+            if (model.getImageB() != null) {
+                JFileChooser fileChooser = new JFileChooser(System.getProperty("user.dir") + "/test/config/");
+                fileChooser.setDialogTitle("Load config");
+                int f = fileChooser.showOpenDialog(GUI.this);
+                if (f == JFileChooser.APPROVE_OPTION) {
+                    File file = fileChooser.getSelectedFile();
+                    model.loadConfigFile(file.getAbsolutePath());
+                    imagePanel.loadConfig();
+                }
+            }
+        });
+
+        addButton("Volume Rendering", "Filters", "Apply volume rendering", true, "/resources/volume.png", ()-> {
+            if (model.getImageB()!=null && model.isVolumeRenderingParametersSet()) {
+                JPanel panel = new JPanel();
+                JDialog dialog = new JDialog();
+                dialog.setTitle("Set depth value");
+                dialog.setResizable(false);
+                dialog.setSize(250, 100);
+                dialog.add(panel);
+                dialog.setLocationRelativeTo(this);
+
+                panel.setBorder(new EmptyBorder(5, 5, 5, 5));
+                panel.setLayout(new GridLayout(2, 2, 5, 10));
+                panel.add(new JLabel("Depth:"));
+
+                try {
+                    JTextField parameterField = new JTextField();
+                    parameterField.setText(Integer.toString(350));
+                    panel.add(parameterField);
+                    dialog.setVisible(true);
+
+                    JButton ok = new JButton("OK");
+                    ok.addActionListener(e -> {
+                        int depth = Integer.parseInt(parameterField.getText());
+                        if (depth > 1 && depth <= 350) {
+                            imagePanel.volumeRedering(depth);
+                            dialog.dispose();
+                        }
+                        else
+                            JOptionPane.showMessageDialog(this, "depth must be from 1 to 350", "error", JOptionPane.WARNING_MESSAGE);
+                    });
+                    panel.add(ok);
+
+                    JButton cancel = new JButton("Cancel");
+                    cancel.addActionListener(e -> dialog.dispose());
+                    panel.add(cancel);
+                    dialog.setVisible(true);
+                } catch (Exception e) {
+                    System.err.println(e.getMessage());
+                }
+            }
+        });
+
+        toolBar.addSeparator();
+
         addButton("Info", "Help", "Show author's info", true, "/resources/info.jpg", () ->
                 JOptionPane.showMessageDialog(null, "Filter v.1.0\n" + "Author:\t Ayya Galieva, gr. 16201",
                         "Author info", JOptionPane.INFORMATION_MESSAGE));
@@ -508,6 +565,11 @@ public class GUI extends JFrame{
     public void showFailedToSave() {
         JOptionPane.showMessageDialog(this, "C image is empty", "error", JOptionPane.WARNING_MESSAGE);
     }
+
+    public void showInvalidConfigFile() {
+        JOptionPane.showMessageDialog(this, "invalid config file", "error", JOptionPane.WARNING_MESSAGE);
+    }
+
     public ImagePanel getImagePanel() {
         return imagePanel;
     }

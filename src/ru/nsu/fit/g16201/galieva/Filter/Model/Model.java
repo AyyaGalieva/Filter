@@ -6,9 +6,9 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.*;
 
 public class Model {
     private GUI view;
@@ -22,6 +22,15 @@ public class Model {
 
     private int rotationAngle = 0;
     private int gammaCor = 100;
+
+    private boolean volumeRenderingParametersSet = false;
+
+    private ArrayList<Double[]> absorbtionValues;
+    private ArrayList<Integer[]> emissionValues;
+    private ArrayList<Double[]> charges;
+
+    private double[] absorbtion;
+    private int[][] emission;
 
     public Model(){}
 
@@ -408,6 +417,210 @@ public class Model {
         imageC = res;
     }
 
+    public void applyVolumeRendering(int gridSizeZ) {
+        BufferedImage res = new BufferedImage(imageB.getWidth(), imageB.getHeight(), imageB.getType());
+
+        int gridSizeX = imageB.getWidth();
+        int gridSizeY = imageB.getHeight();
+
+        getAbsorbtionInterpolation();
+        getEmissionInterpolation();
+
+        double normX = 1.0/gridSizeX;
+        double normY = 1.0/gridSizeY;
+        double normZ = 1.0/gridSizeZ;
+
+        double min = Double.MAX_VALUE;
+        double max = Double.MIN_VALUE;
+        double influence;
+        for (int x = 0; x < gridSizeX; ++x) {
+            for (int y = 0; y < gridSizeY; ++y) {
+                for (int z = 0; z < gridSizeZ; ++z) {
+                    influence = getChargesInfluence(x, y, z, normX, normY, normZ);
+                    min = Math.min(min, influence);
+                    max = Math.max(max, influence);
+                }
+            }
+        }
+
+        for (int x = 0; x < gridSizeX; ++x) {
+            for (int y = 0; y < gridSizeY; ++y) {
+                int r = getRed(imageB.getRGB(x, y));
+                int g = getGreen(imageB.getRGB(x, y));
+                int b = getBlue(imageB.getRGB(x, y));
+
+                double rI = (double)r;
+                double gI = (double)g;
+                double bI = (double)b;
+                for (int z = 0; z < gridSizeZ; ++z) {
+                    influence = getChargesInfluence(x, y, z, normX, normY, normZ);
+                    int xPos = (int)(Math.round((influence-min)/(max-min)*100));
+                    rI = rI*Math.exp(-(absorbtion[xPos]*normZ)) + ((double)emission[xPos][0]*normZ);
+                    gI = gI*Math.exp(-(absorbtion[xPos]*normZ)) + ((double)emission[xPos][1]*normZ);
+                    bI = bI*Math.exp(-(absorbtion[xPos]*normZ)) + ((double)emission[xPos][2]*normZ);
+                }
+                rI = (rI>0xff)?0xff:rI;
+                rI = (rI<0)?0:rI;
+                gI = (gI>0xff)?0xff:gI;
+                gI = (gI<0)?0:gI;
+                bI = (bI>0xff)?0xff:bI;
+                bI = (bI<0)?0:bI;
+                res.setRGB(x, y, ((int)rI<<16)|((int)gI<<8)|(int)bI);
+            }
+        }
+        imageC = res;
+    }
+
+    private double getChargesInfluence(int x, int y, int z, double normX, double normY, double normZ) {
+        double influence = 0;
+        for (Double[] charge : charges) {
+            double distance = Math.sqrt(Math.abs(normX*(x+0.5) - charge[0]) * Math.abs(normX*(x+0.5) - charge[0]) +
+                    Math.abs(normY*(y+0.5) - charge[1])*Math.abs(normY*(y+0.5) - charge[1]) +
+                    Math.abs(normZ*(z+0.5) - charge[2])*Math.abs(normZ*(z+0.5) - charge[2]));
+            distance = (distance < 0.1)?0.1:distance;
+            influence += charge[3]/distance;
+        }
+        return influence;
+    }
+
+    public void loadConfigFile(String path) {
+        try {
+            Scanner in = new Scanner(new File(path));
+            absorbtionValues = new ArrayList<>();
+            emissionValues = new ArrayList<>();
+            charges = new ArrayList<>();
+
+            absorbtion = new double[101];
+            Arrays.fill(absorbtion, 0.0);
+            emission = new int[101][3];
+            for (int i = 0; i < 101; ++i)
+                Arrays.fill(emission[i], 0);
+
+            int absorbtionCount = getNextInt(in);
+            if (absorbtionCount == -1) {
+                view.showInvalidConfigFile();
+            }
+            try {
+                for (int i = 0; i <= absorbtionCount; ++i) {
+                    readAbsorbtionValue(in);
+                }
+                int emissionCount = getNextInt(in);
+                for (int i = 0; i <= emissionCount; ++i) {
+                    readEmissionValue(in);
+                }
+                int chargesCount = getNextInt(in);
+                for (int i = 0; i <= chargesCount; ++i) {
+                    readCharge(in);
+                }
+            } catch (Exception e) {
+                view.showInvalidConfigFile();
+            }
+            volumeRenderingParametersSet = true;
+        } catch (FileNotFoundException e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+    private int getNextInt(Scanner in) {
+        while (!in.hasNextInt() && in.hasNextLine()) {
+            String str[] = (in.nextLine()).split("//");
+            try {
+                return Integer.parseInt(str[0]);
+            } catch (NumberFormatException e) {}
+        }
+        if (in.hasNextInt())
+            return in.nextInt();
+        return -1;
+    }
+
+    private void readAbsorbtionValue(Scanner in) {
+        if (in.hasNextLine()) {
+            String str[] = (in.nextLine()).split("//");
+            String params[] = str[0].split(" ");
+            try {
+                int x = Integer.parseInt(params[0]);
+                double val = Double.parseDouble(params[1]);
+                absorbtion[x] = val;
+                absorbtionValues.add(new Double[]{(double)x, val});
+            } catch (Exception e) {}
+        }
+    }
+
+    private void readEmissionValue(Scanner in) {
+        if (in.hasNextLine()) {
+            String str[] = (in.nextLine()).split("//");
+            String params[] = str[0].split(" ");
+            try {
+                int x = Integer.parseInt(params[0]);
+                int r = Integer.parseInt(params[1]);
+                int g = Integer.parseInt(params[2]);
+                int b = Integer.parseInt(params[3]);
+                emissionValues.add(new Integer[]{x, r, g, b});
+                emission[x][0] = r;
+                emission[x][1] = g;
+                emission[x][2] = b;
+            } catch (Exception e) {}
+        }
+    }
+
+    private void readCharge(Scanner in) {
+        if (in.hasNextLine()) {
+            String str[] = (in.nextLine()).split("//");
+            String params[] = str[0].split(" ");
+            try {
+                double x = Double.parseDouble(params[0]);
+                double y = Double.parseDouble(params[1]);
+                double z = Double.parseDouble(params[2]);
+                double q = Double.parseDouble(params[3]);
+                charges.add(new Double[] {x, y, z, q});
+            } catch (Exception e) {}
+        }
+    }
+
+    private void getAbsorbtionInterpolation() {
+        int prevAbsorbX = 0;
+        double prevAbsorbVal = absorbtion[0];
+        for (Double[] absorbtionNode : absorbtionValues) {
+            if (absorbtionNode[0] != prevAbsorbX) {
+                absorbtion[(int)(double)absorbtionNode[0]] = absorbtionNode[1];
+                for (int i = 1; i < absorbtionNode[0] - prevAbsorbX; ++i) {
+                    double step = (absorbtionNode[1]-prevAbsorbVal)/(absorbtionNode[0]-prevAbsorbX);
+                    absorbtion[i+prevAbsorbX] = prevAbsorbVal + step*i;
+                }
+            }
+            prevAbsorbX = (int)(double)absorbtionNode[0];
+            prevAbsorbVal = absorbtionNode[1];
+        }
+    }
+
+    private void getEmissionInterpolation() {
+        int prevEmisX = 0;
+        int prevEmisR = emission[0][0];
+        int prevEmisG = emission[0][1];
+        int prevEmisB = emission[0][2];
+
+        for (Integer[] emissionNode : emissionValues) {
+            if (emissionNode[0] != prevEmisX) {
+                emission[emissionNode[0]][0] = emissionNode[1];
+                emission[emissionNode[0]][1] = emissionNode[2];
+                emission[emissionNode[0]][2] = emissionNode[3];
+                for (int i = 1; i < emissionNode[0]-prevEmisX; ++i) {
+                    double rStep = (double)(emissionNode[1]-prevEmisR)/(emissionNode[0]-prevEmisX);
+                    double gStep = (double)(emissionNode[2]-prevEmisG)/(emissionNode[0]-prevEmisX);
+                    double bStep = (double)(emissionNode[3]-prevEmisB)/(emissionNode[0]-prevEmisX);
+                    emission[i+prevEmisX][0] = (int)(prevEmisR + rStep*i);
+                    emission[i+prevEmisX][1] = (int)(prevEmisG + gStep*i);
+                    emission[i+prevEmisX][2] = (int)(prevEmisB + bStep*i);
+
+                }
+            }
+            prevEmisX = emissionNode[0];
+            prevEmisR = emissionNode[1];
+            prevEmisG = emissionNode[2];
+            prevEmisB = emissionNode[3];
+        }
+    }
+
     public BufferedImage getImageA() {
         return imageA;
     }
@@ -459,4 +672,17 @@ public class Model {
     public int getGamma() {
         return gammaCor;
     }
+
+    public ArrayList<Double[]> getAbsorbtionValues() {
+        return absorbtionValues;
+    }
+
+    public ArrayList<Integer[]> getEmissionValues() {
+        return emissionValues;
+    }
+
+    public boolean isVolumeRenderingParametersSet() {
+        return volumeRenderingParametersSet;
+    }
 }
+

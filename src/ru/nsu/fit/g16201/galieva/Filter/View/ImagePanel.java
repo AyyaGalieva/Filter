@@ -7,6 +7,8 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.Map;
 
 public class ImagePanel extends JPanel {
     private BufferedImage image;
@@ -26,15 +28,14 @@ public class ImagePanel extends JPanel {
             return;
         }
 
-        image = new BufferedImage(1100, 400, BufferedImage.TYPE_INT_ARGB);
+        image = new BufferedImage(1100, 500, BufferedImage.TYPE_INT_ARGB);
         graphics2D = image.createGraphics();
         graphics2D.setColor(borderColor);
         graphics2D.setBackground(getBackground());
 
-        setPreferredSize(new Dimension(1100, 400));
+        setPreferredSize(new Dimension(1100, 500));
 
         drawRectangles();
-
     }
 
     private void drawRectangles() {
@@ -318,9 +319,85 @@ public class ImagePanel extends JPanel {
         }
     }
 
+    public void loadConfig() {
+        graphics2D.setColor(borderColor);
+        float[] dash = {1};
+        graphics2D.setStroke(new BasicStroke(1, BasicStroke.CAP_SQUARE, BasicStroke.JOIN_MITER, 1, dash, 0.0f));
+        graphics2D.drawLine(230, 440, 510, 440);
+        graphics2D.drawLine(230, 440, 230, 380);
+        graphics2D.drawString("absorbtion", 330,455);
+
+        graphics2D.drawLine(540, 440, 820, 440);
+        graphics2D.drawLine(540, 440, 540, 380);
+        graphics2D.drawString("emission", 650,455);
+
+        int absorbtionOffsetX = 230;
+        int absorbtionOffsetY = 438;
+        int emissionOffsetX = 540;
+        int emissionOffsetY = 438;
+
+        int chartYDiapason = 58;
+        int chartXDiapason = 280;
+
+        ArrayList<Double[]> absorbtion = model.getAbsorbtionValues();
+
+        int x1 = absorbtionOffsetX;
+        int y1 = absorbtionOffsetY - (int)((absorbtion.get(0)[0] == 0 ? absorbtion.get(0)[1] : 0)*chartYDiapason);
+
+        for (Double[] absorbVal : absorbtion) {
+            if (absorbVal[0] == 0)
+                continue;
+            int x2 = (int)((absorbVal[0]/100)*chartXDiapason) + absorbtionOffsetX;
+            int y2 = absorbtionOffsetY - (int)(absorbVal[1]*chartYDiapason);
+            graphics2D.drawLine(x1, y1, x2, y2);
+            x1 = x2;
+            y1 = y2;
+        }
+
+        ArrayList<Integer[]> emission = model.getEmissionValues();
+        int xr1 = emissionOffsetX;
+        int xb1 = emissionOffsetX;
+        int xg1 = emissionOffsetX;
+        int r1 = emissionOffsetY - (int)(((double)(emission.get(0)[0] == 0 ? emission.get(0)[1] : 0)/255)*chartYDiapason);
+        int g1 = emissionOffsetY - (int)(((double)(emission.get(0)[0] == 0 ? emission.get(0)[2] : 0)/255)*chartYDiapason) - 1;
+        int b1 = emissionOffsetY - (int)(((double)(emission.get(0)[0] == 0 ? emission.get(0)[3] : 0)/255)*chartYDiapason) - 2;
+
+        for (Integer[] emissionVal : emission) {
+            if (emissionVal[0] == 0)
+                continue;
+            int xr2 = (int)(((double)emissionVal[0]/100)*chartXDiapason) + emissionOffsetX;
+            int xg2 = (int)(((double)emissionVal[0]/100)*chartXDiapason) + emissionOffsetX + 1;
+            int xb2 = (int)(((double)emissionVal[0]/100)*chartXDiapason) + emissionOffsetX + 2;
+
+            int r2 = emissionOffsetY - (int)(((double)emissionVal[1]/255)*chartYDiapason);
+            int g2 = emissionOffsetY - (int)(((double)emissionVal[2]/255)*chartYDiapason) - 1;
+            int b2 = emissionOffsetY - (int)(((double)emissionVal[3]/255)*chartYDiapason) - 2;
+
+            graphics2D.setColor(Color.RED);
+            graphics2D.drawLine(xr1, r1, xr2, r2);
+            graphics2D.setColor(Color.GREEN);
+            graphics2D.drawLine(xg1, g1, xg2, g2);
+            graphics2D.setColor(Color.BLUE);
+            graphics2D.drawLine(xb1, b1, xb2, b2);
+            xr1 = xr2;
+            xg1 = xg2;
+            xb1 = xb2;
+            r1 = r2;
+            g1 = g2;
+            b1 = b2;
+        }
+        repaint();
+    }
+
+    public void volumeRedering(int gridSizeZ) {
+        model.applyVolumeRendering(gridSizeZ);
+        graphics2D.drawImage(model.getImageC(), 730, 10, 350, 350, this);
+        repaint();
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        g.drawImage(image, 0, 0, 1100, 400, this);
+        g.drawImage(image, 0, 0, 1100, 500, this);
     }
 }
