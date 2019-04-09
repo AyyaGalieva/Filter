@@ -445,13 +445,9 @@ public class Model {
 
         for (int x = 0; x < gridSizeX; ++x) {
             for (int y = 0; y < gridSizeY; ++y) {
-                int r = getRed(imageB.getRGB(x, y));
-                int g = getGreen(imageB.getRGB(x, y));
-                int b = getBlue(imageB.getRGB(x, y));
-
-                double rI = (double)r;
-                double gI = (double)g;
-                double bI = (double)b;
+                double rI = (double)getRed(imageB.getRGB(x, y));
+                double gI = (double)getGreen(imageB.getRGB(x, y));
+                double bI = (double)getBlue(imageB.getRGB(x, y));
                 for (int z = 0; z < gridSizeZ; ++z) {
                     influence = getChargesInfluence(x, y, z, normX, normY, normZ);
                     int xPos = (int)(Math.round((influence-min)/(max-min)*100));
